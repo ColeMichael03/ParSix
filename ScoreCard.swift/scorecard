@@ -1,0 +1,90 @@
+import Foundation
+
+struct Hole {
+    let number: Int
+    var strokes: Int?
+    let par: Int
+}
+
+class ScoreCard {
+    private(set) var holes: [Hole]
+    var totalScore: Int {
+        holes.compactMap { $0.strokes }.reduce(0, +)
+    }
+    var totalPar: Int {
+        holes.map { $0.par }.reduce(0, +)
+    }
+    
+    init(numberOfHoles: Int = 18, pars: [Int]? = nil) {
+        if let pars = pars, pars.count == numberOfHoles {
+            holes = (1...numberOfHoles).map { Hole(number: $0, strokes: nil, par: pars[$0 - 1]) }
+        } else {
+            holes = (1...numberOfHoles).map { Hole(number: $0, strokes: nil, par: 4) }
+        }
+    }
+    
+    func setStrokes(forHole holeNumber: Int, strokes: Int) {
+        guard let index = holes.firstIndex(where: { $0.number == holeNumber }) else { return }
+        holes[index].strokes = strokes
+    }
+    
+    func strokes(forHole holeNumber: Int) -> Int? {
+        holes.first(where: { $0.number == holeNumber })?.strokes
+    }
+    
+    func scoreRelativeToPar() -> Int? {
+        let playedStrokes = holes.compactMap { $0.strokes }
+        if playedStrokes.count < holes.count { return nil }
+        return totalScore - totalPar
+    }
+}
+
+class GameManager {
+    static let shared = GameManager()
+    private(set) var ongoingGames: [UUID: [String: ScoreCard]] = [:] // [gameId: [username: ScoreCard]]
+    private(set) var finishedGames: [UUID: [String: ScoreCard]] = [:]
+    
+    private init() {}
+    
+    func startNewGame(numberOfHoles: Int = 18, pars: [Int]? = nil, players: [String]) -> UUID {
+        let gameId = UUID()
+        var playerScoreCards: [String: ScoreCard] = [:]
+        for username in players {
+            playerScoreCards[username] = ScoreCard(numberOfHoles: numberOfHoles, pars: pars)
+        }
+        ongoingGames[gameId] = playerScoreCards
+        return gameId
+    }
+    
+    func getScoreCard(for gameId: UUID, username: String) -> ScoreCard? {
+        ongoingGames[gameId]?[username] ?? finishedGames[gameId]?[username]
+    }
+    
+    func setStrokes(for gameId: UUID, username: String, holeNumber: Int, strokes: Int) {
+        ongoingGames[gameId]?[username]?.setStrokes(forHole: holeNumber, strokes: strokes)
+    }
+    
+    // Automatically input parsed score for a player
+    func inputParsedScore(for gameId: UUID, username: String, parsedScores: [Int?]) {
+        guard let scoreCard = ongoingGames[gameId]?[username] else { return }
+        for (index, strokes) in parsedScores.enumerated() {
+            if let strokes = strokes {
+                scoreCard.setStrokes(forHole: index + 1, strokes: strokes)
+            }
+        }
+    }
+    
+    func finishGame(gameId: UUID) {
+        if let scoreCards = ongoingGames.removeValue(forKey: gameId) {
+            finishedGames[gameId] = scoreCards
+        }
+    }
+    
+    func ongoingGameIds() -> [UUID] {
+        Array(ongoingGames.keys)
+    }
+    
+    func finishedGameIds() -> [UUID] {
+        Array(finishedGames.keys)
+    }
+}
